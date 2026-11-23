@@ -56,6 +56,7 @@ import {
 import { loadLandTables } from './landtables.js';
 import { loadClashes } from './landclash.js';
 import { LandCinematic } from './landcine.js';
+import { ARMED_ORDERS } from './landminimap.js';
 import { Wildlife, isAmbient } from './landlife.js';
 import { Bolts } from './landbolts.js';
 import { Shots } from './landshots.js';
@@ -153,7 +154,6 @@ import { beaconType } from './beacons.js';
 import { SpectatorView } from './spectator.js';
 
 const LAND_TICK = 1 / 30;
-const ARMED_ORDERS = new Set(['guard', 'attack', 'move', 'attackmove']);
 const nextTask = () =>
   new Promise(r => {
     const ch = new MessageChannel();
@@ -2580,40 +2580,7 @@ export class LandGame {
       if (!this.controlsLocked && this.turnDrag === 'tilt' && e.buttons & 2)
         v.pitch = Math.min(far[1] * DEG, Math.max(k[0][1] * DEG, v.pitch + e.movementY * 0.005));
     });
-    const send = (x, y, mode = '') => {
-      if (this.controlsLocked) return;
-      const foe = this.unitAt(x, y),
-        g = this.groundAt(x, y),
-        attack = foe && !w.ally(foe.side, me) && !foe.dead;
-      let spoke = false;
-      const sel = ui.movers();
-      if (!sel.length || (!attack && !g)) return;
-      const r = this.command({ c: 'move', u: sel.map(q => q.id), mode, t: attack ? foe.squad.id : 0, ...(g ? { x: g.x, y: g.y } : {}) });
-      if (!attack && g) ui.radar?.click(g.x, g.y, mode === 'attack');
-      const at = r?.at || new Map();
-      for (const q of sel) {
-        if (!attack && g && mode === 'attack' && q.members.some(u => u.needsDeploy && u.weapon)) {
-          (this.pings ||= []).push({ x: g.x, y: g.y, t: 0, color: '#ff5544' });
-          continue;
-        }
-        if (g || attack)
-          (this.pings ||= []).push({
-            x: attack ? foe.x : (at.get(q) || g).x,
-            y: attack ? foe.y : (at.get(q) || g).y,
-            t: 0,
-            color: attack
-              ? '#ff5544'
-              : mode === 'attackmove'
-                ? '#ffb347'
-                : mode === 'waypoint'
-                  ? '#7fd4ff'
-                  : mode === 'guard'
-                    ? '#4fb3ff'
-                    : '#6be675'
-          });
-        if (!spoke) spoke = !!this.audio.playVoice(q.members[0], q.members[0].type.str(attack ? 'SFXEvent_Attack' : 'SFXEvent_Move'));
-      }
-    };
+    const send = (x, y, mode = '') => this.orderAt(this.unitAt(x, y), this.groundAt(x, y), mode);
     const place = (sx, sy, ex, ey) => {
       const list = ui.placeList || [ui.placing],
         from = ex !== undefined ? this.groundAt(sx, sy) : null;
@@ -2798,6 +2765,43 @@ export class LandGame {
       pr.set(m.x, m.y, m.z + 4).project(this.camera);
       return pr.z < 1 && Math.abs(pr.x) <= 1 && Math.abs(pr.y) <= 1;
     });
+  }
+
+  // One move/attack order for the selection, from a press in the world or on the radar (no foe there).
+  orderAt(foe, g, mode = '') {
+    if (this.controlsLocked) return;
+    const ui = this.ui,
+      w = this.world,
+      me = this.me,
+      attack = foe && !w.ally(foe.side, me) && !foe.dead;
+    let spoke = false;
+    const sel = ui.movers();
+    if (!sel.length || (!attack && !g)) return;
+    const r = this.command({ c: 'move', u: sel.map(q => q.id), mode, t: attack ? foe.squad.id : 0, ...(g ? { x: g.x, y: g.y } : {}) });
+    if (!attack && g) ui.radar?.click(g.x, g.y, mode === 'attack');
+    const at = r?.at || new Map();
+    for (const q of sel) {
+      if (!attack && g && mode === 'attack' && q.members.some(u => u.needsDeploy && u.weapon)) {
+        (this.pings ||= []).push({ x: g.x, y: g.y, t: 0, color: '#ff5544' });
+        continue;
+      }
+      if (g || attack)
+        (this.pings ||= []).push({
+          x: attack ? foe.x : (at.get(q) || g).x,
+          y: attack ? foe.y : (at.get(q) || g).y,
+          t: 0,
+          color: attack
+            ? '#ff5544'
+            : mode === 'attackmove'
+              ? '#ffb347'
+              : mode === 'waypoint'
+                ? '#7fd4ff'
+                : mode === 'guard'
+                  ? '#4fb3ff'
+                  : '#6be675'
+        });
+      if (!spoke) spoke = !!this.audio.playVoice(q.members[0], q.members[0].type.str(attack ? 'SFXEvent_Attack' : 'SFXEvent_Move'));
+    }
   }
 
   groundAt(sx, sy) {

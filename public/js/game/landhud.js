@@ -16,6 +16,7 @@ import {
 } from './landbase.js';
 import { CELL } from './terrain.js';
 import { Radar } from './radar.js';
+import { radarToWorld, radarOrderPoint, radarPress } from './landminimap.js';
 import { BeaconView } from './beacons.js';
 import { PICKS_UNIT, SILENT, bribeCost } from './landabilities.js';
 
@@ -303,21 +304,40 @@ export class LandUI {
     this.pb.hidden = this.pbCharge.hidden = true;
     this.bar.covers = [{ node: this.pb, build: true }];
     const mm = $('minimap');
+    const spot = e => {
+      const r = mm.getBoundingClientRect();
+      return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
+    };
     const look = e => {
       game.following = null;
-      const r = mm.getBoundingClientRect(),
-        lo = game.map.playMin,
-        hi = game.map.playMax;
-      game.view.x = lo[0] + ((e.clientX - r.left) / r.width) * (hi[0] - lo[0]);
-      game.view.y = lo[1] + (1 - (e.clientY - r.top) / r.height) * (hi[1] - lo[1]);
+      const p = radarToWorld(game.map, ...spot(e));
+      game.view.x = p.x;
+      game.view.y = p.y;
     };
-    mm.addEventListener('mousedown', e => {
-      if (e.button === 0) look(e);
-    });
-    mm.addEventListener('mousemove', e => {
-      if (e.buttons & 1) look(e);
-    });
-    mm.addEventListener('contextmenu', e => e.preventDefault());
+    // Right button (or an armed waypoint on the left) orders the selection to the pressed spot, as on the battlefield.
+    const press = e => {
+      if (game.controlsLocked) return;
+      const act = radarPress(e.button, this);
+      if (act.look) return look(e);
+      if (game.over || game.setup?.attract || game.cine?.on || game.direct || !(act.cancel || act.order)) return;
+      if (act.cancel) this.placing = this.armed = this.aiming = null;
+      else {
+        game.orderAt(null, radarOrderPoint(game.map, ...spot(e)), act.mode);
+        if (act.disarm) this.armed = null;
+      }
+      game.hudTimer = 0;
+      e.preventDefault();
+    };
+    const signal = game.life?.signal;
+    mm.addEventListener('mousedown', press, { signal });
+    mm.addEventListener(
+      'mousemove',
+      e => {
+        if (e.buttons & 1 && !game.controlsLocked && radarPress(0, this).look) look(e);
+      },
+      { signal }
+    );
+    mm.addEventListener('contextmenu', e => e.preventDefault(), { signal });
   }
 
   get hudTimer() {
