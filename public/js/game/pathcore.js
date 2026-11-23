@@ -607,17 +607,16 @@ export class PathCore {
       holds = (x, y, ox, oy, reach) => (x - ox) ** 2 + (y - oy) ** 2 < reach * reach;
     for (const e of this.still) {
       if (e.o === u || !this.sees(u, e.o)) continue;
-      const reach = (e.ext?.r || 0) + q.r;
+      const reach = (e.ext?.r || 0) + shipStill.r;
       if (holds(u.x, u.y, e.x, e.y, reach) || holds(gx, gy, e.x, e.y, reach)) continue;
-      obstacles.push({ x: e.x, y: e.y, hard: (e.ext?.r || 0) + shipStill.r, padded: 0 });
+      obstacles.push({ x: e.x, y: e.y, hard: reach, padded: 0 });
     }
-    const fieldKind = field => (field.asteroid ? 1 : 0) | (field.ion ? 2 : 0),
-      hazards = this.world.fields.filter(field => this.world.hazardous(field, u));
-    let droppedKinds = 0;
-    for (const field of hazards)
-      if (holds(u.x, u.y, field.x, field.y, field.r) || holds(gx, gy, field.x, field.y, field.r)) droppedKinds |= fieldKind(field);
-    for (const field of hazards)
-      if (!(fieldKind(field) & droppedKinds)) obstacles.push({ x: field.x, y: field.y, hard: field.r + q.r, padded: 0 });
+    for (const field of this.world.fields) {
+      if (!this.world.hazardous(field, u)) continue;
+      // drop with the same reach the field blocks with, or a hull overlapping its edge starts in a hard cell and never moves
+      const reach = field.r + q.r;
+      if (!holds(u.x, u.y, field.x, field.y, reach) && !holds(gx, gy, field.x, field.y, reach)) obstacles.push({ x: field.x, y: field.y, hard: reach, padded: 0 });
+    }
     return obstacles;
   }
 
@@ -825,8 +824,12 @@ export class PathCore {
           leg = this.findOnce(u, to.x, to.y, 0, legFace);
           states += this.statesUsed || 0;
           if (leg && !leg.length) {
-            complete = false;
-            break;
+            // the coarse leg is clear of hard obstacles: fly it straight rather than leaving the ship idle
+            if (this.detourClear(obstacles, x, y, to.x, to.y, false)) leg = null;
+            else {
+              complete = false;
+              break;
+            }
           }
         }
         if (leg) {
