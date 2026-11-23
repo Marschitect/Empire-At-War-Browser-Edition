@@ -464,7 +464,7 @@ export class GalacticBar extends CommandBar {
       const type = !u.dead && up(u.owner || fleet?.owner) === me && hero(u.carries || u.type);
       if (!type) return;
       if (!ids.has(u)) ids.set(u, (this.heroNext = (this.heroNext || 0) + 1));
-      list.push({ e: { id: ids.get(u), player: this.player, healthFrac: 1, planet: at, fleet }, type });
+      list.push({ e: { id: ids.get(u), player: this.player, healthFrac: 1, planet: at, fleet }, type, tip: u.carries || u.type });
     };
     for (const f of g.fleets) if (up(f.owner) === me) for (const u of f.units) add(u, f.leg ? f.leg.b : f.planet, f);
     for (const p of g.planets) for (const u of p.garrison || []) add(u, p.index);
@@ -475,6 +475,11 @@ export class GalacticBar extends CommandBar {
 
   heroClick(h) {
     this.heroFocus(h);
+  }
+
+  heroHover(d) {
+    this.heroTipSlot = d;
+    this.game.heroTip = d ? { slot: d } : null;
   }
 
   heroFocus(h) {

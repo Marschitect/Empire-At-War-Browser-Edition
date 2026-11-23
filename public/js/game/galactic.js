@@ -2028,6 +2028,12 @@ export class GalacticGame {
       if (tips.popup) encyclopedia.moveLinked(build.x, build.y);
       return;
     }
+    const hero = this.heroTip?.slot;
+    if (hero?._h && hero.isConnected) {
+      const type = hero._h.tip || hero._h.type;
+      tips.hover({ id: 'hero:' + hero._h.e.id, key: 'hero:' + type.name, show: () => encyclopedia.showType(type, false) });
+      return;
+    }
     const view = this.overviewTip,
       shown = view?.slot.record;
     if (shown && !view.slot.el.hidden && this.overview && !this.overview.root.hidden) {

@@ -1949,6 +1949,12 @@ export class CommandBar {
     this.ui.select([h.e], ev.shiftKey);
   }
 
+  heroHover(d) {
+    this.heroTipSlot = d;
+    if (d) this.tipOn('hero' + d._h.e.id, d._h.type);
+    else this.hideInfo();
+  }
+
   heroFocus(h) {
     this.ui.r.rig.x = h.e.x;
     this.ui.r.rig.y = h.e.y;
@@ -1961,6 +1967,8 @@ export class CommandBar {
     const sig = list.map(h => h.e.id).join();
     if (sig !== bar.sig) {
       bar.sig = sig;
+      // A slot rebuilt under the cursor never gets its mouseleave.
+      if (this.heroTipSlot && bar.el.contains(this.heroTipSlot)) this.heroHover(null);
       bar.el.replaceChildren();
       bar.el.style.display = list.length ? '' : 'none';
       if (!list.length) return;
@@ -2010,10 +2018,14 @@ export class CommandBar {
         ring.style.backgroundImage = css(this.tex(id, 'Blank_Texture_Name'));
         over.style.backgroundImage = css(this.tex(id, 'Mouse_Over_Texture_Name'));
         hp.style.backgroundImage = css(this.tex('hero_hb_' + side + '00', 'Bar_Texture_Name'));
-        d.title = db.t(h.type.str('Text_ID')) || h.type.name.replace(/_/g, ' ');
+        d.setAttribute('aria-label', db.t(h.type.str('Text_ID')) || h.type.name.replace(/_/g, ' '));
         if (good && h.e.player === this.player) {
           const c = this.comp(id);
-          d.onmouseenter = () => this.game.audio.play(c.val('Mouse_Over_SFX'));
+          d.onmouseenter = () => {
+            this.game.audio.play(c.val('Mouse_Over_SFX'));
+            this.heroHover(d);
+          };
+          d.onmouseleave = () => this.heroHover(null);
           d.onclick = ev => {
             ev.stopPropagation();
             this.game.audio.play(c.val('Click_SFX'));
