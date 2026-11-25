@@ -201,6 +201,7 @@ const simOnly = {
     'chase',
     'fireTarget',
     'pickHp',
+    'aimHp',
     'pickOf',
     'goal',
     'guardAt',
