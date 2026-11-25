@@ -175,6 +175,7 @@ function newWing(world, first, kind, gx, gy, target) {
     escort: null,
     check: world.time + 1 + ((id % 30) + 1) / 30,
     follow: false,
+    still: 0,
     at: null,
     reached: false,
     key: '',
@@ -394,7 +395,7 @@ const centreOf = list => {
 export const fieldPassed = (f, through) =>
   !!through && ((f.asteroid && (through & 4) !== 0) || (f.ion && (through & 8) !== 0) || (f.nebula && (through & 16) !== 0));
 
-export function orderMove(entities, x, y, attackMove = false, waypoint = false, safe = false, through = 0) {
+export function orderMove(entities, x, y, attackMove = false, waypoint = false, safe = false, through = 0, topSpeed = false) {
   const movers = entities.filter(e => e.isSquad || e.isMobile);
   const kind = attackMove ? 'attackmove' : 'move';
   const moving = e => e.order.kind === 'move' || e.order.kind === 'attackmove';
@@ -407,7 +408,7 @@ export function orderMove(entities, x, y, attackMove = false, waypoint = false, 
       return v;
     });
     const slots = formationSlots(from, x, y),
-      speeds = formationSpeeds(from, { x, y });
+      speeds = topSpeed ? from.map(() => 1) : formationSpeeds(from, { x, y });
     movers.forEach((e, i) => {
       const leg = { kind, x: slots[i].x, y: slots[i].y, pace: speeds[i], group: movers.length };
       if (through) leg.through = through;
@@ -421,7 +422,7 @@ export function orderMove(entities, x, y, attackMove = false, waypoint = false, 
     movers.forEach((e, i) => {
       if (e.world) slots[i] = e.world.clearOf(e, slots[i].x, slots[i].y, through);
     });
-  const speeds = formationSpeeds(movers, { x, y }),
+  const speeds = topSpeed ? movers.map(() => 1) : formationSpeeds(movers, { x, y }),
     wings = composeWings(movers, kind, x, y, null),
     starts = staggerStarts(movers, x, y);
   movers.forEach((e, i) => {
@@ -600,7 +601,7 @@ function spotBlockers(world, bonus) {
   const cells = kept.cells;
   for (const l of cells.values()) l.length = 0;
   for (const o of world.units) {
-    if (o.isFighter || o.isPad) continue;
+    if (o.isFighter || o.isPad || fieldProp(o)) continue;
     const k = !o.isStructure && tracked ? paths.trackBy.get(o) : null;
     let x0, x1, y0, y1;
     if (k) {
@@ -635,9 +636,14 @@ function spotBlockers(world, bonus) {
   return kept;
 }
 
+// A nebula, ion storm or asteroid field prop the map puts down as an object: the world leaves it out of what stands
+// still (flownThrough in sim.js), and obstacleAt tests its field as a field, by the same rules as the route search.
+const fieldProp = o =>
+  (o._fieldProp ??= !!o.isStructure && (o.type.bool('Is_Asteroid_Field') || o.type.bool('Is_Nebula') || o.type.bool('Is_Ion_Storm')));
+
 // Whether `o` blocks the spot: the same test for every candidate, whichever way they were found.
 function blocks(world, e, p, r, group, bonus, o) {
-  if (o.dead || group.has(o) || o.isFighter || o.isPad || o === e) return false;
+  if (o.dead || group.has(o) || o.isFighter || o.isPad || o === e || fieldProp(o)) return false;
   const dx = p.x - o.x,
     dy = p.y - o.y,
     d = Math.hypot(dx, dy),

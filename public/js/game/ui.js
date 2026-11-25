@@ -19,6 +19,7 @@ const ORDER_KEYS = [
 ];
 import { Pointers, tacticalPointer } from './pointers.js';
 import { Radar } from './radar.js';
+import { DoubleClick } from './doubleclick.js';
 import { showHand, formation, slotAt, stretched, laidOut, WHEEL_TURN } from './placehand.js';
 import { ArcView } from './directview.js';
 import { ChaseView } from './chaseview.js';
@@ -187,6 +188,8 @@ export class UI {
     this.buildSig = '';
     this.selSig = '';
     this.pings = [];
+    this.rightTwice = new DoubleClick();
+    this.mapTwice = new DoubleClick();
     this.lastAlert = -100;
     this.placing = null;
     this.reinSig = null;
@@ -356,7 +359,7 @@ export class UI {
         this.arm(null);
         return;
       }
-      this.pendingCommand = { x: m.x, y: m.y, ctrl: e.ctrlKey, shift: e.shiftKey || e.altKey, fast: e.detail >= 2 };
+      this.pendingCommand = { x: m.x, y: m.y, ctrl: e.ctrlKey, shift: e.shiftKey || e.altKey, fast: this.rightTwice.hit(m.x, m.y) };
       this.ctrlTurn = e.ctrlKey && !e.shiftKey && !e.altKey ? { x: m.x, y: m.y } : null;
       const movers = this.mine().filter(s => !s.dead && (s.isSquad || s.isMobile)),
         g = this.r.pickGround(m.x, m.y),
@@ -1544,14 +1547,15 @@ export class UI {
     const w = this.world;
     g.x = Math.max(w.min.x, Math.min(w.max.x, g.x));
     g.y = Math.max(w.min.y, Math.min(w.max.y, g.y));
-    this.game.command({ c: 'move', u: ids(mine), x: g.x, y: g.y, attack: !!attackMove, waypoint: !!waypoint, fast: !!fast && !attackMove });
-    this.pings.push({ x: g.x, y: g.y, t: 0, color: attackMove ? '#ffb347' : waypoint ? '#7fd4ff' : '#6be675', r: 40 });
-    this.radarClick(g.x, g.y, attackMove);
+    const twice = !!fast && !attackMove && !waypoint;
+    this.game.command({ c: 'move', u: ids(mine), x: g.x, y: g.y, attack: !!attackMove, waypoint: !!waypoint, fast: !!fast && !attackMove, ...(twice ? { max: true } : {}) });
+    this.pings.push({ x: g.x, y: g.y, t: 0, color: attackMove ? '#ffb347' : waypoint ? '#7fd4ff' : twice ? '#d8ffd8' : '#6be675', r: 40, twice });
+    this.radarClick(g.x, g.y, attackMove, twice);
     this.sayMove(mine, g.x, g.y, attackMove);
   }
 
-  radarClick(x, y, attack) {
-    this.radar.click(x, y, attack);
+  radarClick(x, y, attack, twice = false) {
+    this.radar.click(x, y, attack, twice);
   }
 
   minimapClick(e) {
@@ -1571,12 +1575,14 @@ export class UI {
         return;
       }
       const mine = this.mine().filter(s => s.isSquad || s.isMobile || s.hasWeapons);
+      const second = e.button === 2 && !armed && this.mapTwice.hit(e.clientX, e.clientY);
       if (mine.length) {
         const attack = armed ? armed === 'attackmove' : e.ctrlKey;
+        const twice = second && !attack;
         if (armed === 'guard') this.game.command({ c: 'guard', u: ids(mine), t: 0, x, y });
-        else this.game.command({ c: 'move', u: ids(mine), x, y, attack: !!attack, waypoint: armed === 'waypoint' });
-        this.pings.push({ x, y, t: 0, color: attack ? '#ffb347' : '#6be675', r: 40 });
-        this.radarClick(x, y, attack);
+        else this.game.command({ c: 'move', u: ids(mine), x, y, attack: !!attack, waypoint: armed === 'waypoint', ...(twice ? { max: true } : {}) });
+        this.pings.push({ x, y, t: 0, color: attack ? '#ffb347' : twice ? '#d8ffd8' : '#6be675', r: 40, twice });
+        this.radarClick(x, y, attack, twice);
         if (armed === 'guard') this.say(this.voiceOf(mine), 'SFXEvent_Guard', 'SFXEvent_Move');
         else this.sayMove(mine, x, y, attack);
       }
@@ -1949,6 +1955,11 @@ export class UI {
       g.beginPath();
       g.ellipse(p.x, p.y, 8 + pg.t * 40, (8 + pg.t * 40) * 0.6, 0, 0, 6.283);
       g.stroke();
+      if (pg.twice) {
+        g.beginPath();
+        g.ellipse(p.x, p.y, 4 + pg.t * 70, (4 + pg.t * 70) * 0.6, 0, 0, 6.283);
+        g.stroke();
+      }
       this.pings[n++] = pg;
     }
     this.pings.length = n;
